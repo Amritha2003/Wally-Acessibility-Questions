@@ -1,0 +1,6 @@
+1. How can I resolve Excel OpenSolver Add-In RefEdit Compile Error: Variable Not Defined Issue?
+   https://stackoverflow.com/questions/79689793/how-can-i-resolve-excel-opensolver-add-in-refedit-compile-error-variable-not-de
+
+2. What’s Missing in Accessibility Testing Tools? Looking for Feedback and Ideas [closed]
+   https://ux.stackexchange.com/questions/153763/what-s-missing-in-accessibility-testing-tools-looking-for-feedback-and-ideas
+
