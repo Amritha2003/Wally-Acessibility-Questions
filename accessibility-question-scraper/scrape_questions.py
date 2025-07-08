@@ -9,6 +9,7 @@ from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 import time
 from post_to_discourse import DISCOURSE_API_KEY, DISCOURSE_API_USER, DISCOURSE_URL
+from datetime import datetime, timedelta
 
 KEYWORDS = [
     "accessibility", "a11y", "accessible", "inclusive design", "assistive technology", "aria", "aria-label", "WCAG", "ADA", "Section 508", "EN 301 549", "EAA", "compliance", "accessibility testing", "VPAT", "audit", "screen reader", "screenreader", "VoiceOver", "TalkBack", "NVDA", "JAWS", "ChromeVox", "keyboard navigation",
@@ -31,6 +32,12 @@ CATEGORY_KEYWORDS = {
     14: ["ADA", "Section 508", "EN 301 549", "EAA"],                     # ADA Compliance Workflow
     20: ["screen reader", "screenreader", "JAWS", "NVDA", "ChromeVox"],  # screen reader
 }
+
+STACK_OVERFLOW_TAGS = [
+    "accessibility", "a11y", "accessible", "inclusive-design", "assistive-technology", "aria", "aria-label", "WCAG", "ADA",
+    "section-508", "en-301-549", "eaa", "compliance", "accessibility-testing", "vpat", "audit", "screen-reader", "screenreader",
+    "voiceover", "talkback", "nvda", "jaws", "chromevox", "keyboard-navigation"
+]
 
 def keyword_filter(text):
     return any(kw.lower() in text.lower() for kw in KEYWORDS)
@@ -75,22 +82,28 @@ def scrape_reddit():
             results.append((title, f"https://www.reddit.com{href}"))
     return results
 
-def scrape_stackoverflow_selenium():
-    options = Options()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    driver.get("https://stackoverflow.com/questions?tab=Newest")
-    time.sleep(3)  # Wait for JS to load content
+def fetch_stackoverflow_questions_api():
     results = []
-    questions = driver.find_elements(By.CSS_SELECTOR, ".s-post-summary--content-title a")
-    for q in questions:
-        title = q.text.strip()
-        link = q.get_attribute('href')
-        if keyword_filter(title):
-            results.append((title, link))
-    driver.quit()
+    seen_links = set()
+    fromdate = int((datetime.utcnow() - timedelta(days=1)).timestamp())  # last 24h
+    for tag in STACK_OVERFLOW_TAGS:
+        url = "https://api.stackexchange.com/2.3/questions"
+        params = {
+            "order": "desc",
+            "sort": "creation",
+            "tagged": tag,
+            "site": "stackoverflow",
+            "pagesize": 20,
+            "fromdate": fromdate
+        }
+        res = requests.get(url, params=params)
+        data = res.json()
+        for item in data.get("items", []):
+            title = item["title"]
+            link = item["link"]
+            if link not in seen_links:
+                results.append((title, link))
+                seen_links.add(link)
     return results
 
 def get_all_questions():
@@ -100,18 +113,18 @@ def get_all_questions():
         scrape_reddit()
     )
 
-def get_category_for_question(title):
+def get_category_for_question(title, tags):
     title_lower = title.lower()
     for category_id, keywords in CATEGORY_KEYWORDS.items():
         for kw in keywords:
-            if kw.lower() in title_lower:
+            if kw.lower() in title_lower or kw.lower() in [t.lower() for t in tags]:
                 return category_id
-    return None  # Or a default category ID if you want
+    return None
 
 def run_scraper_and_post():
-    questions = scrape_stackoverflow_selenium()
+    questions = fetch_stackoverflow_questions_api()
     for title, link in questions:
-        category_id = get_category_for_question(title)
+        category_id = get_category_for_question(title, [])
         if category_id:
             post_question(title, f"Found this question: {link}", category_id)
         else:
@@ -135,7 +148,8 @@ def post_question(title, content, category_id):
         print(f"❌ Failed to post: {title} -- {r.text}")
 
 if __name__ == "__main__":
-    questions = scrape_stackoverflow_selenium()
-    with open("scraped_questions_selenium.txt", "w", encoding="utf-8") as f:
+    questions = fetch_stackoverflow_questions_api()
+    with open("scraped_questions_api.txt", "w", encoding="utf-8") as f:
         for i, (title, link) in enumerate(questions, 1):
-            f.write(f"{i}. {title}\n   {link}\n\n")
+            category_id = get_category_for_question(title, [])
+            f.write(f"{i}. {title}\n   {link}\n   Category: {category_id}\n\n")
