@@ -107,12 +107,21 @@ def get_category_for_question(title, tags):
     return None
 
 def run_scraper_and_email():
-    questions = fetch_stackoverflow_questions_api()
+    so_questions = fetch_stackoverflow_questions_api()
+    se_questions = fetch_stackexchange_questions()
+    reddit_questions = fetch_reddit_questions()
+
+    all_questions = so_questions + se_questions + reddit_questions
+
     body = "Scraped questions:\n\n"
-    for i, (title, link, tags) in enumerate(questions, 1):
-        body += f"{i}. {title}\n{link}\nTags: {', '.join(tags)}\n\n"
-    subject = "Daily Accessibility Questions"
-    send_email(subject, body)
+    for i, (title, link, tags) in enumerate(all_questions, 1):
+        body += (
+        f"{i}. {title}\n"
+        f"   {link}\n"
+        f"   Tags: {', '.join(tags)}\n\n"
+    )
+
+    send_email(EMAIL_SUBJECT, body)
     print("Email sent!")
 
 now = datetime.now()
