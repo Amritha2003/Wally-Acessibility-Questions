@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 import schedule
 import time
 from ses import send_email
+import re
+from bs4 import BeautifulSoup
 
 STACK_OVERFLOW_TAGS = [
     "accessibility", "a11y", "accessible", "inclusive-design", "assistive-technology", "aria", "aria-label", "WCAG", "ADA",
@@ -98,6 +100,28 @@ def fetch_reddit_questions():
                 seen_links.add(link)
     return results
 
+def fetch_quora_questions():
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    url = 'https://www.quora.com/topic/Accessibility-1/questions'
+    res = requests.get(url, headers=headers)
+    if res.status_code != 200:
+        return []
+    soup = BeautifulSoup(res.text, 'html.parser')
+    results = []
+    seen_links = set()
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        title = a.get_text(strip=True)
+        if not title or not href:
+            continue
+        if '/question/' not in href:
+            continue
+        link = f'https://www.quora.com{href}' if href.startswith('/') else href
+        if link not in seen_links:
+            results.append((title, link, ['quora']))
+            seen_links.add(link)
+    return results
+
 def get_category_for_question(title, tags):
     title_lower = title.lower()
     for category_id, keywords in CATEGORY_KEYWORDS.items():
@@ -110,15 +134,16 @@ def run_scraper_and_email():
     so_questions = fetch_stackoverflow_questions_api()
     se_questions = fetch_stackexchange_questions()
     reddit_questions = fetch_reddit_questions()
+    quora_questions = fetch_quora_questions()
 
-    all_questions = so_questions + se_questions + reddit_questions
+    all_questions = so_questions + se_questions + reddit_questions + quora_questions
 
-    body = "Scraped questions:\n\n"
+    body = "Scraped questions:<br><br>"
     for i, (title, link, tags) in enumerate(all_questions, 1):
         body += (
-        f"{i}. {title}\n"
-        f"   {link}\n"
-        f"   Tags: {', '.join(tags)}\n\n"
+        f"{i}. {title}<br>"
+        f"&nbsp;&nbsp;{link}<br>"
+        f"&nbsp;&nbsp;Tags: {', '.join(tags)}<br><br>"
     )
 
     send_email(EMAIL_SUBJECT, body)
